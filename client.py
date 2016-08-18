@@ -14,10 +14,19 @@ class MyClientProtocol(WebSocketClientProtocol):
 
     def onOpen(self):
         print("WebSocket connection open.")
+        payload = 'getNextVariant'
+        self.sendMessage(payload.encode('utf8'), False)
 
     def onMessage(self, payload, isBinary):
+        payload = payload.decode('utf8')
+        if payload == "finished": 
+            self.sendClose()
+            return
+        print("{}".format(payload))
         self.num_variants += 1
-        print("{}".format(payload.decode('utf8')))
+        if self.num_variants % 1000 == 0: print(self.num_variants)
+        payload = 'getNextVariant'
+        self.sendMessage(payload.encode('utf8'), False)
         # normally you'd transform the variant back to json here 
         # and do something with it eg...
         #obj = json.loads(payload.decode('utf8'))
