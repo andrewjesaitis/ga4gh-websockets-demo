@@ -1,4 +1,5 @@
 import sys
+import json
 
 from autobahn.twisted.websocket import WebSocketClientProtocol, WebSocketClientFactory
 from twisted.python import log
@@ -18,11 +19,14 @@ class MyClientProtocol(WebSocketClientProtocol):
         self.num_variants += 1
         print("{}".format(payload.decode('utf8')))
         # normally you'd transform the variant back to json here 
-        # and do something with it
-
+        # and do something with it eg...
+        #obj = json.loads(payload.decode('utf8'))
+        #print("{}".format(json.dumps(obj, sort_keys=True, indent=4, separators=(',', ': '))))
+        
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {0}".format(reason))
         print("{} variants transfered during session".format(self.num_variants))
+        reactor.stop()
 
 
 if __name__ == '__main__':

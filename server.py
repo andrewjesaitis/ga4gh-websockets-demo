@@ -2,8 +2,12 @@ import sys
 import json
 
 from autobahn.twisted.websocket import WebSocketServerProtocol, WebSocketServerFactory
+import google.protobuf.json_format as json_format
 from twisted.python import log
 from twisted.internet import reactor
+
+import datamodel.variant
+import ga4gh.variant_service_pb2 as variant_service_pb2
 
 class MyServerProtocol(WebSocketServerProtocol):
 
@@ -13,10 +17,16 @@ class MyServerProtocol(WebSocketServerProtocol):
 
     def onOpen(self):
         print("WebSocket connection open.")
-        
-        test_variant = {"variant_id": "abc123"}
-        payload = json.dumps(test_variant).encode('utf8')
-        self.sendMessage(payload, isBinary = False)
+        reference_name = 'NCBI37'
+        start = 0
+        end = 10000000
+
+        for rec in datamodel.variant.getPysamVariants(reference_name, '1', start, end):
+                variant = datamodel.variant.convertVariant(rec, None)
+                payload = json_format.MessageToJson(variant).encode('utf8')
+                self.sendMessage(payload, isBinary = False)
+                self.num_variants += 1
+        self.sendClose()
 
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {0}".format(reason))
