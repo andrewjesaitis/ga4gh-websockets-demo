@@ -7,8 +7,7 @@ from autobahn.twisted.util import sleep
 from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 import google.protobuf.json_format as json_format
 from twisted.internet import reactor
-from twisted.python import log
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.task import cooperate
 
 import datamodel.variant
 import ga4gh.variant_service_pb2 as variant_service_pb2
@@ -19,23 +18,21 @@ class Component(ApplicationSession):
         ApplicationSession.__init__(self, config)
         self.num_variants = 0
 
-    @inlineCallbacks
-    def onJoin(self, details):
-        print("session attached")
-
-        @inlineCallbacks
-        def getVariants(details=None):
-            reference_name = 'NCBI37'
-            start = 0
-            end = 100000#00
-            for rec in datamodel.variant.getPysamVariants(reference_name, '1', start, end):
-                variant = datamodel.variant.convertVariant(rec, None)
-                payload = json_format.MessageToJson(variant).encode('utf8')
-                self.num_variants += 1
-                details.progress(payload)
-                yield True
-            returnValue(True)
-            self.sendClose()
+    def sendVariants(self, reference_name, start, end):
+        for rec in datamodel.variant.getPysamVariants(reference_name, '1', start, end):
+            variant = datamodel.variant.convertVariant(rec, None)
+            payload = json_format.MessageToJson(variant).encode('utf8')
+            self.sendMessage(payload, isBinary = False)
+            self.num_variants += 1
+            yield None
+        self.sendClose()  
+      
+    def onOpen(self):
+        print("WebSocket connection open.")
+        reference_name = 'NCBI37'
+        start = 0
+        end = 10000000
+        cooperate(self.sendVariants(reference_name, start, end))
 
         yield self.register(getVariants, u'com.myapp.getVariants', RegisterOptions(details_arg='details'))
 
