@@ -20,8 +20,6 @@ wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/ALL.chr1.phase3_s
 ## Run it
 
 ```
-crossbar start --cbdir ./
-<open another terminal>
 python server.py
 <open another terminal>
 python client.py
