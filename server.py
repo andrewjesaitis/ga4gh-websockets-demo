@@ -1,58 +1,52 @@
 import sys
 import json
+from os import environ
 
-from autobahn.twisted.websocket import WebSocketServerProtocol, WebSocketServerFactory
+from autobahn.wamp.types import RegisterOptions
+from autobahn.twisted.util import sleep
+from autobahn.twisted.wamp import ApplicationSession, ApplicationRunner
 import google.protobuf.json_format as json_format
-from twisted.python import log
 from twisted.internet import reactor
+from twisted.python import log
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 import datamodel.variant
 import ga4gh.variant_service_pb2 as variant_service_pb2
 
-class MyServerProtocol(WebSocketServerProtocol):
+class Component(ApplicationSession):
 
-    def onConnect(self, request):
+    def __init__(self, config=None):
+        ApplicationSession.__init__(self, config)
         self.num_variants = 0
-        self.variantGenerator = self.variantPayloadGenerator('NCBI37', 0, 10000000)
-        print("Client connecting: {0}".format(request.peer))
 
-    def variantPayloadGenerator(self, reference_name, start, end):
-        for rec in datamodel.variant.getPysamVariants(reference_name, '1', start, end):
-            variant = datamodel.variant.convertVariant(rec, None)
-            payload = json_format.MessageToJson(variant).encode('utf8')
-            yield payload
+    @inlineCallbacks
+    def onJoin(self, details):
+        print("session attached")
 
-    def onOpen(self):
-        print("WebSocket connection open.")
-        
-    def onMessage(self, payload, isBinary):
-        if self.num_variants % 1000 == 0: print(self.num_variants)
-        if isBinary:
-            print("Binary message received: {0} bytes".format(len(payload)))
-        else:
-            # print("Text message received: {0}".format(payload.decode('utf8')))
-            payload = payload.decode('utf8')
-            if payload == "getNextVariant":
-                try:
-                    payload = self.variantGenerator.next()
-                    self.sendMessage(payload, False)
-                    self.num_variants += 1
-                except Exception as e:
-                    print(e)
-                    # No more variants
-                    payload = 'finished'
-                    self.sendMessage(payload.encode('utf8'), False)
-            
-    def onClose(self, wasClean, code, reason):
-        print("WebSocket connection closed: {0}".format(reason))
+        @inlineCallbacks
+        def getVariants(details=None):
+            reference_name = 'NCBI37'
+            start = 0
+            end = 100000#00
+            for rec in datamodel.variant.getPysamVariants(reference_name, '1', start, end):
+                variant = datamodel.variant.convertVariant(rec, None)
+                payload = json_format.MessageToJson(variant).encode('utf8')
+                self.num_variants += 1
+                details.progress(payload)
+                yield True
+            returnValue(True)
+            self.sendClose()
+
+        yield self.register(getVariants, u'com.myapp.getVariants', RegisterOptions(details_arg='details'))
+
+        print("procedures registered")
+
+    def onLeave(self, details):
+        print("Left connection: {0}".format(details))
         print("{} variants sent".format(self.num_variants))
 
-
 if __name__ == '__main__':
-    log.startLogging(sys.stdout)
-
-    factory = WebSocketServerFactory(u"ws://127.0.0.1:9000")
-    factory.protocol = MyServerProtocol
-
-    reactor.listenTCP(9000, factory)
-    reactor.run()
+    runner = ApplicationRunner(url=u"ws://127.0.0.1:8080/ws",
+                               realm=u"crossbardemo")
+    
+    runner.run(Component)
